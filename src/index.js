@@ -1,55 +1,98 @@
 import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
+
 const app = express();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
 app.set("view engine", "ejs");
+
+
+app.set("views", path.join(__dirname, "../views"));
+
+// Body parser
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-app.get("/", (req, res) => {
-  res.render("index", { data: null });
-});
+// Static files
+app.use(express.static(path.join(__dirname, "../public")));
+
+
 
 const getWikiData = async (month, day) => {
   const url = `https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/all/${month}/${day}`;
+
   try {
-    const res = await fetch(url);
-    const data = await res.json();
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`Wikipedia API error: ${response.status}`);
+    }
+
+    const data = await response.json();
 
     return data;
-
-    // You can loop and display this on your webpage
-  } catch (err) {
-    console.error("Error fetching data", err);
+  } catch (error) {
+    console.error("Error fetching Wikipedia data:", error);
     return null;
   }
 };
 
+
+
+app.get("/", (req, res) => {
+  res.render("index", {
+    data: null,
+    dob: null,
+  });
+});
+
 app.post("/getData", (req, res) => {
   const { date } = req.body;
 
-  res.redirect(`/getData/show?date=${date}`);
+  if (!date) {
+    return res.redirect("/");
+  }
+
+  res.redirect(`/getData/show?date=${encodeURIComponent(date)}`);
 });
 
 app.get("/getData/show", async (req, res) => {
-  console.log(req.query);
-  const d = req.query.date;
-  if (!d) {
-    return res.send("Please Select DOB");
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.send("Please select DOB");
+    }
+
+    const selectedDate = new Date(date);
+
+    if (isNaN(selectedDate.getTime())) {
+      return res.send("Invalid date");
+    }
+
+    const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
+    const day = String(selectedDate.getDate()).padStart(2, "0");
+
+    const data = await getWikiData(month, day);
+
+    if (!data) {
+      return res.send("Unable to fetch data");
+    }
+
+    res.render("index", {
+      data: data,
+      dob: selectedDate.toDateString(),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Something went wrong");
   }
-  let date = new Date(d);
-
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  const data = await getWikiData(month, day);
-
-  if (!data) {
-    return res.send(" unable to fetch data");
-  }
-
-  res.render("index", { data: data, dob: date.toDateString() });
 });
 
-app.listen(9000, () => {
-  console.log(` server is running on 9000`);
-});
+
+
+export default app;
