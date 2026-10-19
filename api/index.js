@@ -92,7 +92,3 @@ app.get("/getData/show", async (req, res) => {
     res.status(500).send("Something went wrong");
   }
 });
-
-
-
-export default app;
